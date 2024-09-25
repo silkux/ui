@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>okcomputer-radiohead</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400&display=swap');
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #1a202c;
+            font-family: 'Roboto', sans-serif;
+        }
+        .container {
+            position: relative;
+            width: 60px;
+            height: 60px;
+            transition: all 0.5s ease;
+        }
+        .pulse-container {
+            position: absolute;
+            top: -170%;
+            left: -170%;
+            width: 440%;
+            height: 440%;
+            z-index: 1;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        .pulse {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background-color: rgba(231, 76, 60, 0.3);
+            opacity: 0;
+            animation: pulse 4s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.25); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 0; }
+        }
+        .player {
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            background-color: #2c3e50;
+            border-radius: 30px;
+            overflow: hidden;
+            width: 60px;
+            height: 60px;
+            transition: all 0.5s ease;
+            z-index: 3;
+        }
+        .player.expanded {
+            width: 250px;
+            height: 40px;
+        }
+        .button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            background-color: #e74c3c;
+            position: relative;
+            z-index: 2;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .player.expanded .button {
+            width: 40px;
+            height: 40px;
+        }
+        .button:hover {
+            background-color: #c0392b;
+        }
+        .icon {
+            width: 24px;
+            height: 24px;
+            fill: #ffffff;
+            transition: all 0.3s ease;
+        }
+        .player.expanded .icon {
+            width: 16px;
+            height: 16px;
+        }
+        .progress-container {
+            flex-grow: 1;
+            height: 4px;
+            background-color: #34495e;
+            margin: 0 10px;
+            position: relative;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .progress-bar {
+            height: 100%;
+            background-color: #3498db;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+        .progress-head {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            width: 12px;
+            height: 12px;
+            background-color: #3498db;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: left 0.1s linear;
+            cursor: grab;
+        }
+        .progress-head:active {
+            cursor: grabbing;
+        }
+        .time {
+            font-size: 10px;
+            color: #ffffff;
+            margin-right: 10px;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            white-space: nowrap;
+        }
+        .text {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #ffffff;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 4;
+        }
+    </style>
+</head>
+<body>
+    <div id="container" class="container">
+        <div id="pulseContainer" class="pulse-container"></div>
+        <div id="player" class="player">
+            <button id="mainButton" class="button">
+                <svg class="icon" viewBox="0 0 24 24" id="buttonIcon">
+                    <circle cx="12" cy="12" r="10"></circle>
+                </svg>
+            </button>
+            <div id="progressContainer" class="progress-container">
+                <div id="progressBar" class="progress-bar"></div>
+                <div id="progressHead" class="progress-head"></div>
+            </div>
+            <div id="time" class="time">00:00 / 03:00</div>
+        </div>
+        <div id="statusText" class="text">Grabar</div>
+    </div>
+
+    <script>
+        const container = document.getElementById('container');
+        const player = document.getElementById('player');
+        const mainButton = document.getElementById('mainButton');
+        const buttonIcon = document.getElementById('buttonIcon');
+        const statusText = document.getElementById('statusText');
+        const pulseContainer = document.getElementById('pulseContainer');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressHead = document.getElementById('progressHead');
+        const timeDisplay = document.getElementById('time');
+
+        let isRecording = false;
+        let isPlaying = false;
+        let pulseInterval;
+        let progressInterval;
+        let currentTime = 0;
+        const totalTime = 180; // 3 minutes in seconds
+
+        const PULSE_INTERVAL = 1000;
+        const MAX_PULSES = 3;
+
+        function createPulse() {
+            const pulse = document.createElement('div');
+            pulse.classList.add('pulse');
+            pulseContainer.appendChild(pulse);
+
+            pulse.addEventListener('animationend', () => {
+                pulse.remove();
+            });
+
+            if (pulseContainer.children.length > MAX_PULSES) {
+                pulseContainer.removeChild(pulseContainer.firstChild);
+            }
+        }
+
+        function startRecording() {
+            isRecording = true;
+            buttonIcon.innerHTML = '<rect x="7" y="7" width="10" height="10" rx="2" ry="2"/>';
+            statusText.textContent = 'Grabando';
+            mainButton.style.backgroundColor = '#e74c3c';
+            pulseContainer.style.opacity = '1';
+            
+            createPulse();
+            pulseInterval = setInterval(createPulse, PULSE_INTERVAL);
+        }
+
+        function stopRecording() {
+            isRecording = false;
+            buttonIcon.innerHTML = '<circle cx="12" cy="12" r="10"/>';
+            statusText.textContent = 'Grabar';
+            
+            clearInterval(pulseInterval);
+            pulseContainer.style.opacity = '0';
+
+            setTimeout(transformToPlayer, 500);
+        }
+
+        function transformToPlayer() {
+            player.classList.add('expanded');
+            buttonIcon.innerHTML = '<polygon points="9,6 9,18 19,12"/>';
+            statusText.textContent = 'Reproducir';
+            mainButton.style.backgroundColor = '#e74c3c';
+            
+            setTimeout(() => {
+                progressContainer.style.opacity = '1';
+                timeDisplay.style.opacity = '1';
+            }, 250);
+        }
+
+        function togglePlay() {
+            if (isPlaying) {
+                buttonIcon.innerHTML = '<polygon points="9,6 9,18 19,12"/>';
+                statusText.textContent = 'Reproducir';
+                clearInterval(progressInterval);
+            } else {
+                buttonIcon.innerHTML = '<rect x="7" y="6" width="4" height="12" rx="1" ry="1"/><rect x="14" y="6" width="4" height="12" rx="1" ry="1"/>';
+                statusText.textContent = 'Pausar';
+                progressInterval = setInterval(updateProgress, 1000);
+            }
+            isPlaying = !isPlaying;
+        }
+
+        function updateProgress() {
+            currentTime++;
+            if (currentTime >= totalTime) {
+                clearInterval(progressInterval);
+                isPlaying = false;
+                buttonIcon.innerHTML = '<polygon points="9,6 9,18 19,12"/>';
+                statusText.textContent = 'Reproducir';
+                currentTime = 0;
+            }
+            const percentage = (currentTime / totalTime) * 100;
+            setProgress(percentage);
+        }
+
+        function setProgress(percentage) {
+            progressBar.style.width = `${percentage}%`;
+            progressHead.style.left = `${percentage}%`;
+            timeDisplay.textContent = `${formatTime(currentTime)} / ${formatTime(totalTime)}`;
+        }
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function handleButtonClick() {
+            if (isRecording) {
+                stopRecording();
+            } else if (player.classList.contains('expanded')) {
+                togglePlay();
+            } else {
+                startRecording();
+            }
+        }
+
+        mainButton.addEventListener('click', handleButtonClick);
+
+        progressContainer.addEventListener('click', (e) => {
+            if (!player.classList.contains('expanded')) return;
+            const rect = progressContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const percentage = (x / rect.width) * 100;
+            currentTime = Math.floor((percentage / 100) * totalTime);
+            setProgress(percentage);
+        });
+
+        let isDragging = false;
+
+        progressHead.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', stopDrag);
+        });
+
+        function drag(e) {
+            if (!isDragging) return;
+            const rect = progressContainer.getBoundingClientRect();
+            let x = e.clientX - rect.left;
+            x = Math.max(0, Math.min(x, rect.width));
+            const percentage = (x / rect.width) * 100;
+            currentTime = Math.floor((percentage / 100) * totalTime);
+            setProgress(percentage);
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', stopDrag);
+        }
+    </script>
+</body>
+</html>
